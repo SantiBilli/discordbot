@@ -1,4 +1,4 @@
-# 🎧 Riffito
+# 🎧 AstraMusic
 
 Bot de música para Discord, preparado para tu VPS con Docker y Dokploy.
 
@@ -30,7 +30,7 @@ playlists, enlaces cortos de Spotify ni transmisiones en vivo.
 ## 1. Crear el bot e invitarlo a Discord
 
 1. Abrí https://discord.com/developers/applications y seleccioná **New Application**.
-2. Nombrala **Riffito**. Entrá en **Bot** y creá el bot si todavía no aparece.
+2. Nombrala **AstraMusic**. Entrá en **Bot** y creá el bot si todavía no aparece.
 3. En **Bot → Privileged Gateway Intents**, activá **Message Content Intent** y guardá.
    Es necesario para leer `!p`, `!skip` y `!stop`. No necesita los intents de miembros o presencia.
 4. En **Bot → Reset Token**, obtené el token. Guardalo como un secreto: va en
@@ -62,7 +62,7 @@ necesita dominio, HTTPS propio, reverse proxy ni puertos publicados**.
    ```
 
 6. Hacé **Deploy**. Docker instala Python, FFmpeg, Opus, Deno y las dependencias.
-7. En los logs buscá `Riffito conectado como ...`.
+7. En los logs buscá `AstraMusic conectado como ...`.
 8. Entrá al canal de voz de Discord y probá `!p` con un video musical disponible.
    Agregá otro, probá `!skip` y finalmente `!stop`.
 

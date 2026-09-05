@@ -11,7 +11,7 @@ from media import normalize_link, resolve
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-log = logging.getLogger("riffito")
+log = logging.getLogger("astramusic")
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None,
@@ -175,12 +175,12 @@ async def stop_command(ctx):
 
 @bot.command(name="help", aliases=["ayuda"])
 async def help_command(ctx):
-    await ctx.send("🎧 **Riffito**\n`!p <link>` — reproduce o agrega a la cola (YouTube/Spotify).\n`!skip` — siguiente canción.\n`!stop` — vacía la cola y desconecta.\nSpotify busca una coincidencia en YouTube; solo canciones individuales. Me desconecto tras 2 minutos sin música.")
+    await ctx.send("🎧 **AstraMusic**\n`!p <link>` — reproduce o agrega a la cola (YouTube/Spotify).\n`!skip` — siguiente canción.\n`!stop` — vacía la cola y desconecta.\nSpotify busca una coincidencia en YouTube; solo canciones individuales. Me desconecto tras 2 minutos sin música.")
 
 
 @bot.event
 async def on_ready():
-    log.info("Riffito conectado como %s", bot.user)
+    log.info("AstraMusic conectado como %s", bot.user)
 
 
 @bot.event

@@ -1,5 +1,5 @@
 services:
-  riffito:
+  astramusic:
     build: .
     restart: unless-stopped
     init: true
