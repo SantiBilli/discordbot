@@ -1,0 +1,13 @@
+services:
+  riffito:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?Configura DISCORD_TOKEN}
+    mem_limit: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
