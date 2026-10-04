@@ -1,5 +1,12 @@
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.pyc
 data/
+*.log
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/

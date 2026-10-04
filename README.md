@@ -1,193 +1,160 @@
-# 🎧 AstraMusic
+# AstraMusic
 
-Bot de música para Discord, preparado para tu VPS con Docker y Dokploy.
+**English** · [Español](README.es.md)
 
-## Comandos
+![AstraMusic — persistent radio and music for Discord](docs/assets/banner.svg)
 
-Entrá a un canal de voz y escribí en un canal de texto:
+[![CI](https://github.com/SantiBilli/discordbot/actions/workflows/ci.yml/badge.svg)](https://github.com/SantiBilli/discordbot/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-teal.svg)](LICENSE)
 
-```text
-!p https://www.youtube.com/watch?v=dQw4w9WgXcQ
-!p https://open.spotify.com/track/ID_DE_LA_CANCION
-!radio https://radio.garden/listen/nombre/ID_DE_LA_EMISORA
-!radio estado
-!radio off
-!skip
-!stop
-!help
-```
+A self-hosted Discord music bot built with Python. Play individual YouTube videos,
+look up Spotify tracks, and keep a Radio Garden station running in your voice
+channel—even when everyone leaves. Deploy it with Docker Compose or Dokploy.
 
-Usá un video normal, no una transmisión en vivo.
-`!p` reproduce o agrega a la cola. `!skip` salta incluso mientras busca audio.
-`!stop` vacía la cola y desconecta. Solo quienes están en el mismo canal de voz
-pueden controlarlo. Cada servidor tiene su propia cola (hasta 50 pendientes).
-Se desconecta después de 2 minutos sin canciones. Las colas se pierden al reiniciar.
+## Features
 
-## Radio Garden 24/7
+- **Persistent radio:** stay connected in empty channels and restore active radio
+  after normal container or VPS restarts.
+- **Music over radio:** songs interrupt the station; radio resumes when the queue finishes.
+- **Per-server queues:** up to 50 pending tracks per server, with independent playback state.
+- **Automatic recovery:** refresh radio stream URLs and retry interruptions with
+  increasing delays, capped at 60 seconds.
+- **Voice controls:** only listeners in the configured voice channel can change or stop playback.
+- **Docker deployment:** a non-root container, persistent radio volume, restart policy, and rotating logs.
 
-Entrá al canal de voz donde querés escuchar la radio y usá
-`!radio <enlace de Radio Garden>`. Copiá el enlace de una **emisora**, con formato
-`https://radio.garden/listen/nombre/ID`; los enlaces `/visit/` corresponden a ciudades.
-Por ejemplo: `!radio https://radio.garden/listen/cyberstacja/TP8NDBv7`.
-El bot obtiene el stream original y lo reproduce con FFmpeg, sin descargarlo.
+## Quick start
 
-- `!radio estado` (o `!radio`): muestra la emisora y si está sonando, conectando,
-  reconectando o pausada por canciones.
-- `!radio <otro enlace>`: cambia la emisora de fondo y conserva la cola.
-- `!p <link>`: interrumpe la radio para reproducir la cola; al terminar, vuelve
-  automáticamente la emisora configurada. `!skip` salta canciones, no la radio.
-- `!radio off`: desactiva la radio y conserva las canciones. Si no queda música,
-  se desconecta después de 2 minutos.
-- `!stop`: desactiva la radio, vacía la cola y desconecta. La radio también queda
-  desactivada para los próximos reinicios.
-
-Con la radio activa permanece conectado incluso si el canal está vacío. Si el
-stream falla o termina, obtiene un enlace actualizado y reintenta con esperas
-de 5, 10, 20, 40 y hasta 60 segundos; también recupera cortes transitorios de voz.
-Si alguien lo desconecta del canal o lo expulsa del servidor, apaga la radio y
-borra la configuración guardada: no vuelve a entrar ni la retoma al reiniciar.
-Para activarla de nuevo, entrá al canal y mandá otra vez `!radio <enlace>`.
-Los reinicios normales del contenedor siguen retomando la radio activa.
-Solo quienes están en el mismo canal de voz pueden cambiarla o detenerla.
-Si movés al bot a otro canal de voz, guarda ese canal como el nuevo destino.
-
-Cada servidor guarda su emisora y los canales de voz/texto en
-`RADIO_STATE_FILE` (por defecto, `data/radio.json`). En Docker se guarda en
-`/app/data/radio.json`, dentro del volumen **radio_data**, con permisos para el
-usuario del bot. Después de reiniciar el contenedor o el VPS, el bot retoma la
-radio automáticamente al conectarse a Discord. Las colas de canciones siguen
-siendo temporales. `docker compose down` conserva el volumen; `down -v` lo borra.
-
-El VPS debe permanecer encendido. Algunas emisoras están caídas o restringidas
-por región; probá su disponibilidad desde el VPS si el estado queda reconectando.
-La integración de Radio Garden utiliza su API pública no documentada oficialmente;
-si cambia, puede requerir actualizar `radio.py`.
-
-**Spotify:** acepta enlaces públicos `open.spotify.com/track/...`, obtiene el
-título usando oEmbed y busca una coincidencia en YouTube. No reproduce audio
-directamente desde Spotify ni requiere cuenta Premium o claves de Spotify.
-La coincidencia por título no es exacta: puede encontrar otra versión o artista.
-Para elegir una grabación precisa, mandá el enlace de YouTube. No admite álbumes,
-playlists, enlaces cortos de Spotify ni transmisiones en vivo.
-
-## 1. Crear el bot e invitarlo a Discord
-
-1. Abrí https://discord.com/developers/applications y seleccioná **New Application**.
-2. Nombrala **AstraMusic**. Entrá en **Bot** y creá el bot si todavía no aparece.
-3. En **Bot → Privileged Gateway Intents**, activá **Message Content Intent** y guardá.
-   Es necesario para leer `!p`, `!skip` y `!stop`. No necesita los intents de miembros o presencia.
-4. En **Bot → Reset Token**, obtené el token. Guardalo como un secreto: va en
-   Dokploy o en `.env`, nunca en GitHub ni en un mensaje público.
-5. En **OAuth2 → URL Generator**, marcá el scope **bot** y estos permisos:
-   **View Channels**, **Send Messages**, **Connect** y **Speak**.
-6. Abrí la URL generada, elegí tu servidor y autorizá. Necesitás poder administrar
-   ese servidor. No hace falta darle permiso de Administrador al bot.
-7. Revisá que los permisos específicos del canal de texto/voz no nieguen esos permisos.
-
-El bot aparecerá conectado cuando termines el despliegue. Usá canales de voz
-comunes; los escenarios (Stage Channels) no están soportados.
-
-## 2. Desplegar con Dokploy (recomendado)
-
-Sí, Dokploy sirve. Es un proceso permanente que se conecta a Discord: **no
-necesita dominio, HTTPS propio, reverse proxy ni puertos publicados**.
-
-1. Subí estos archivos a un repositorio de GitHub, preferentemente privado.
-   No subas `.env`; ya está excluido por `.gitignore`.
-2. En Dokploy, creá un proyecto y un servicio de tipo **Docker Compose**.
-3. Elegí el proveedor **GitHub** (conectá tu cuenta) o **Git**, seleccioná el
-   repositorio y la rama que contenga estos archivos.
-4. Configurá el archivo Compose como `docker-compose.yml` en la raíz del repo.
-5. En **Environment**, agregá y guardá:
-
-   ```dotenv
-   DISCORD_TOKEN=TU_TOKEN_REAL
-   ```
-
-6. Hacé **Deploy**. Docker instala Python, FFmpeg, Opus, Deno y las dependencias.
-7. En los logs buscá `AstraMusic conectado como ...`.
-8. Entrá al canal de voz de Discord y probá `!p` con un video musical disponible.
-   Agregá otro, probá `!skip` y finalmente `!stop`.
-
-Para probar la radio después de actualizar y hacer **Deploy**:
-
-1. Entrá a un canal de voz y mandá `!radio <enlace de tu emisora>`.
-2. Usá `!radio estado` y comprobá que se escucha. El bot debe permanecer aunque
-   todos salgan del canal.
-3. Agregá una canción con `!p`; al terminar, la radio debe volver.
-4. Reiniciá el servicio y verificá que retoma la radio sin volver a mandar el
-   enlace. En los logs aparece `Restoring radio for guild ...`.
-5. Usá `!stop` y reiniciá otra vez: ahora debe quedar desactivada.
-6. Volvé a activar la radio y desconectá al bot del canal desde Discord: debe
-   quedar apagada y no volver a entrar, incluso después de reiniciar el servicio.
-
-Conservá el volumen `radio_data` del Compose durante los despliegues. No hace
-falta configurar claves de Radio Garden ni permisos adicionales de Discord.
-
-Mantené **una sola instancia/réplica** usando este token. El contenedor reinicia
-si falla y al reiniciar el VPS. La primera construcción tarda unos minutos.
-El contenedor tiene un límite de 768 MB; dejá memoria adicional para Dokploy y
-los demás servicios. Para varios servidores reproduciendo a la vez, aumentá el límite.
-
-## Alternativa: Docker Compose por SSH
-
-Con Docker y su plugin Compose instalados en el VPS, copiá esta carpeta o cloná
-tu repositorio y, desde la carpeta del proyecto, ejecutá:
+You need Docker with the Compose plugin, a Discord server you can manage, and
+your own bot token. Follow [Discord setup](#discord-setup) first.
 
 ```bash
+git clone https://github.com/SantiBilli/discordbot.git
+cd discordbot
 cp .env.example .env
-nano .env
-# Reemplazá el valor de DISCORD_TOKEN por el token real y guardá.
-chmod 600 .env
+```
+
+In PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
+Edit `.env` locally and replace the `DISCORD_TOKEN` placeholder with your token.
+Never paste it into an issue, commit, screenshot, or public message.
+
+```bash
 docker compose up -d --build
 docker compose logs -f --tail=100
 ```
 
-Para detenerlo: `docker compose down`. Para actualizarlo después de traer
-cambios: `docker compose up -d --build`.
+Wait for `AstraMusic conectado como ...`, join a regular voice channel, and send
+this in a text channel the bot can read:
 
-## Problemas habituales
+```text
+!radio https://radio.garden/listen/fm-aspen-102-3/eyipEP0m
+!radio estado
+```
 
-- **No responde a `!p`:** activá Message Content Intent y revisá View Channels /
-  Send Messages. Si el token no sirve, regeneralo y actualizá el secreto en Dokploy.
-- **Entra pero no se escucha:** revisá Connect / Speak y que no esté silenciado
-  por el servidor. El VPS debe permitir tráfico saliente HTTPS/WebSocket y UDP
-  para voz de Discord. No hace falta abrir un puerto entrante fijo para este bot.
-- **YouTube no reproduce / pide iniciar sesión / bloquea IP:** algunas IP de VPS
-  están restringidas. No se puede garantizar reproducción de todos los videos.
-  Probá un video público, sin restricciones de edad/región. Si falla todo,
-  revisá la conectividad y la IP con tu proveedor.
-- **YouTube dejó de funcionar:** reconstruí sin caché para actualizar yt-dlp:
-  `docker compose build --no-cache && docker compose up -d`.
-  En Dokploy, usá la reconstrucción sin caché disponible para tu servicio.
-- **Spotify reproduce otra versión:** el buscador utiliza el título público;
-  usá un enlace directo de YouTube para seleccionar exactamente la grabación.
-- **Se reinicia por memoria:** revisá los logs y aumentá `mem_limit` si es necesario.
-- **Radio reconectando:** comprobá el enlace `/listen/`, la disponibilidad de la
-  emisora y el acceso de red desde el VPS. Usá `!radio <otro enlace>` para cambiarla.
-- **No guarda la radio:** revisá que `/app/data` tenga el volumen `radio_data`
-  montado y permita escribir al usuario `bot` del contenedor.
-- **No retoma la radio:** verificá que se conservó el volumen, que el canal de voz
-  todavía existe y que el bot tiene permisos Conectar / Hablar.
+Station availability depends on the provider and your server's location. No Radio
+Garden API key is required. For hosting and updates, see the
+[deployment guide](docs/deployment.md), also available in [Spanish](docs/deployment.es.md).
 
-## Desarrollo y comprobaciones
+## Discord setup
 
-Requiere Python 3.12, FFmpeg y Deno instalados en el sistema:
+1. Create an application in the [Discord Developer Portal](https://discord.com/developers/applications).
+2. Open **Bot**, obtain its token, and store it in your local `.env` or deployment
+   environment. Each installation should use its own application and token.
+3. Enable **Message Content Intent** under **Privileged Gateway Intents**. Commands
+   use the `!` prefix; member and presence intents are not required.
+4. In **OAuth2 → URL Generator**, choose the **bot** scope and these permissions:
+   **View Channels**, **Send Messages**, **Connect**, and **Speak**.
+5. Open the generated URL and invite the bot to your server. Administrator
+   permission is unnecessary. Check channel-specific permission overrides too.
+
+## Commands
+
+Send commands in a server text channel. Join the bot's voice channel to control
+playback. Bot responses are currently in Spanish; the commands below work with
+either documentation language.
+
+| Command | Behavior |
+| --- | --- |
+| `!p <YouTube or Spotify track URL>` | Play a track or add it to the queue. Alias: `!play`. |
+| `!radio <Radio Garden station URL>` | Enable radio or change the background station while keeping queued songs. |
+| `!radio estado` or `!radio` | Show the station and playback/recovery status. |
+| `!radio off` | Disable radio and keep the music queue. |
+| `!skip` | Skip a song, including one still being resolved. Continuous radio cannot be skipped. |
+| `!stop` | Disable radio, clear the queue, and disconnect. |
+| `!help` | Show available commands. Alias: `!ayuda`. |
+
+Use a station share link in the format `https://radio.garden/listen/name/ID`.
+Radio Garden `/visit/` links point to cities and are not accepted.
+
+## How radio behaves
+
+| Event | Result |
+| --- | --- |
+| Everyone leaves the voice channel | Radio keeps playing; there is no empty-room timeout. |
+| A track is added with `!p` | Radio pauses for the queue and returns after it finishes. |
+| The station stream ends or fails | The bot refreshes the stream and retries after 5, 10, 20, 40, then 60 seconds. |
+| A transient voice connection fails | The bot attempts to recover the connection. |
+| The container or VPS restarts normally | Saved radio preferences restore playback after connecting to Discord. |
+| Someone disconnects the bot from voice or removes it from the server | Radio is disabled and its saved configuration is removed; it does not intentionally rejoin. |
+| The bot is moved to another regular voice channel | The new destination is saved. |
+| `!radio off` is used | Radio stays disabled after restart; pending music continues. |
+| `!stop` is used | Radio stays disabled after restart and all pending music is cleared. |
+
+Without active radio, the bot disconnects after two minutes without songs.
+Radio preferences persist; music queues do not survive process restarts.
+
+## Configuration
+
+| Variable | Required | Default / purpose |
+| --- | --- | --- |
+| `DISCORD_TOKEN` | Yes, to run the bot | Your own Discord bot token. Tests do not need it. |
+| `RADIO_STATE_FILE` | No | `data/radio.json` locally; Compose sets `/app/data/radio.json`. |
+
+Compose mounts the named volume `radio_data` at `/app/data`. Preserve it when
+redeploying. `docker compose down` keeps it; `docker compose down -v` deletes it.
+Run **one instance per token**. No incoming port, domain, or reverse proxy is
+needed; Discord voice requires outbound network connectivity.
+
+## Limitations
+
+- Spotify links provide public track metadata through oEmbed; playback is a
+  YouTube search match, not audio from Spotify. Another recording may be selected.
+  Albums, playlists, and Spotify short links are unsupported.
+- YouTube playback supports individual non-live videos. Provider restrictions,
+  regional blocks, and unavailable videos can prevent playback.
+- Radio Garden uses public endpoints without an official documented API contract.
+  Changes upstream may require an update to the resolver.
+- Regular voice channels are supported; Stage channels and slash commands are not.
+- Continuous radio requires an available host, Discord connection, and station.
+  Automatic recovery does not guarantee uninterrupted service.
+
+AstraMusic is an independent project, unaffiliated with Discord, YouTube,
+Spotify, or Radio Garden. Use media you are authorized to play.
+
+## Development
+
+Use Python 3.12. Local audio playback also needs FFmpeg, Opus, and Deno; Docker
+provides them. See [Contributing](CONTRIBUTING.md) for platform-specific setup.
 
 ```bash
 python -m venv .venv
-# Linux: source .venv/bin/activate
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-cp .env.example .env
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
-python bot.py
 ```
 
-El token real y una conexión a Discord son necesarios para verificar audio de
-extremo a extremo; las pruebas automáticas simulan voz y proveedores externos.
+The automated suite simulates voice and external providers. GitHub Actions runs
+the tests, builds the Docker image, and scans Git history and tracked files for
+secrets. Real audio verification requires your own Discord test server.
 
-Referencias: [Dokploy Compose](https://docs.dokploy.com/docs/core/docker-compose/example),
-[Discord intents](https://docs.discord.com/developers/events/gateway),
-[Spotify oEmbed](https://developer.spotify.com/documentation/embeds/reference/oembed),
-[yt-dlp / Deno](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+## Project documentation
+
+- [Deployment and troubleshooting](docs/deployment.md)
+- [Architecture and maintenance notes](docs/architecture.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+
+## License
+
+[MIT](LICENSE) © 2026 SantiBilli. Dependencies retain their own licenses.

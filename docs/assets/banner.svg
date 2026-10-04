@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">AstraMusic</title>
+  <desc id="description">Persistent radio and music for Discord. Python, Docker, and Radio Garden.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#0B1020"/>
+      <stop offset="1" stop-color="#172945"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#62E6D0"/>
+      <stop offset="1" stop-color="#83B7FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" rx="24" fill="url(#background)"/>
+  <circle cx="1048" cy="276" r="176" fill="none" stroke="#294463" stroke-width="2"/>
+  <circle cx="1048" cy="276" r="124" fill="none" stroke="#294463" stroke-width="2"/>
+  <circle cx="1048" cy="100" r="8" fill="#62E6D0"/>
+  <g stroke="url(#accent)" stroke-width="12" stroke-linecap="round">
+    <path d="M928 256v40 M952 231v90 M976 205v142 M1000 241v70 M1024 179v194 M1048 213v126 M1072 152v248 M1096 227v98 M1120 194v164 M1144 238v76 M1168 253v46"/>
+  </g>
+  <rect x="80" y="96" width="56" height="6" rx="3" fill="#62E6D0"/>
+  <text x="80" y="199" fill="#F2F6FF" font-family="Segoe UI, Arial, sans-serif" font-size="88" font-weight="700">AstraMusic</text>
+  <text x="84" y="271" fill="#62E6D0" font-family="Segoe UI, Arial, sans-serif" font-size="36" font-weight="600">24/7 radio for Discord</text>
+  <text x="84" y="341" fill="#C0CDDF" font-family="Segoe UI, Arial, sans-serif" font-size="25">Persistent stations. Per-server music queues.</text>
+  <text x="84" y="381" fill="#C0CDDF" font-family="Segoe UI, Arial, sans-serif" font-size="25">Automatic recovery. Self-hosted with Docker.</text>
+  <g font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="600">
+    <rect x="80" y="460" width="120" height="48" rx="12" fill="#20344E"/><text x="105" y="491" fill="#DDE8F8">Python</text>
+    <rect x="216" y="460" width="124" height="48" rx="12" fill="#20344E"/><text x="241" y="491" fill="#DDE8F8">Docker</text>
+    <rect x="356" y="460" width="188" height="48" rx="12" fill="#20344E"/><text x="378" y="491" fill="#DDE8F8">Radio Garden</text>
+  </g>
+  <text x="84" y="579" fill="#819AB9" font-family="Segoe UI, Arial, sans-serif" font-size="20">An open-source project by SantiBilli</text>
+</svg>
