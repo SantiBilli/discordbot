@@ -9,6 +9,9 @@ Entrá a un canal de voz y escribí en un canal de texto:
 ```text
 !p https://www.youtube.com/watch?v=dQw4w9WgXcQ
 !p https://open.spotify.com/track/ID_DE_LA_CANCION
+!radio https://radio.garden/listen/nombre/ID_DE_LA_EMISORA
+!radio estado
+!radio off
 !skip
 !stop
 !help
@@ -19,6 +22,42 @@ Usá un video normal, no una transmisión en vivo.
 `!stop` vacía la cola y desconecta. Solo quienes están en el mismo canal de voz
 pueden controlarlo. Cada servidor tiene su propia cola (hasta 50 pendientes).
 Se desconecta después de 2 minutos sin canciones. Las colas se pierden al reiniciar.
+
+## Radio Garden 24/7
+
+Entrá al canal de voz donde querés escuchar la radio y usá
+`!radio <enlace de Radio Garden>`. Copiá el enlace de una **emisora**, con formato
+`https://radio.garden/listen/nombre/ID`; los enlaces `/visit/` corresponden a ciudades.
+Por ejemplo: `!radio https://radio.garden/listen/cyberstacja/TP8NDBv7`.
+El bot obtiene el stream original y lo reproduce con FFmpeg, sin descargarlo.
+
+- `!radio estado` (o `!radio`): muestra la emisora y si está sonando, conectando,
+  reconectando o pausada por canciones.
+- `!radio <otro enlace>`: cambia la emisora de fondo y conserva la cola.
+- `!p <link>`: interrumpe la radio para reproducir la cola; al terminar, vuelve
+  automáticamente la emisora configurada. `!skip` salta canciones, no la radio.
+- `!radio off`: desactiva la radio y conserva las canciones. Si no queda música,
+  se desconecta después de 2 minutos.
+- `!stop`: desactiva la radio, vacía la cola y desconecta. La radio también queda
+  desactivada para los próximos reinicios.
+
+Con la radio activa permanece conectado incluso si el canal está vacío. Si el
+stream falla o termina, obtiene un enlace actualizado y reintenta con esperas
+de 5, 10, 20, 40 y hasta 60 segundos; también recupera la conexión de voz.
+Solo quienes están en el mismo canal de voz pueden cambiarla o detenerla.
+Si movés al bot a otro canal de voz, guarda ese canal como el nuevo destino.
+
+Cada servidor guarda su emisora y los canales de voz/texto en
+`RADIO_STATE_FILE` (por defecto, `data/radio.json`). En Docker se guarda en
+`/app/data/radio.json`, dentro del volumen **radio_data**, con permisos para el
+usuario del bot. Después de reiniciar el contenedor o el VPS, el bot retoma la
+radio automáticamente al conectarse a Discord. Las colas de canciones siguen
+siendo temporales. `docker compose down` conserva el volumen; `down -v` lo borra.
+
+El VPS debe permanecer encendido. Algunas emisoras están caídas o restringidas
+por región; probá su disponibilidad desde el VPS si el estado queda reconectando.
+La integración de Radio Garden utiliza su API pública no documentada oficialmente;
+si cambia, puede requerir actualizar `radio.py`.
 
 **Spotify:** acepta enlaces públicos `open.spotify.com/track/...`, obtiene el
 título usando oEmbed y busca una coincidencia en YouTube. No reproduce audio
@@ -66,6 +105,19 @@ necesita dominio, HTTPS propio, reverse proxy ni puertos publicados**.
 8. Entrá al canal de voz de Discord y probá `!p` con un video musical disponible.
    Agregá otro, probá `!skip` y finalmente `!stop`.
 
+Para probar la radio después de actualizar y hacer **Deploy**:
+
+1. Entrá a un canal de voz y mandá `!radio <enlace de tu emisora>`.
+2. Usá `!radio estado` y comprobá que se escucha. El bot debe permanecer aunque
+   todos salgan del canal.
+3. Agregá una canción con `!p`; al terminar, la radio debe volver.
+4. Reiniciá el servicio y verificá que retoma la radio sin volver a mandar el
+   enlace. En los logs aparece `Restoring radio for guild ...`.
+5. Usá `!stop` y reiniciá otra vez: ahora debe quedar desactivada.
+
+Conservá el volumen `radio_data` del Compose durante los despliegues. No hace
+falta configurar claves de Radio Garden ni permisos adicionales de Discord.
+
 Mantené **una sola instancia/réplica** usando este token. El contenedor reinicia
 si falla y al reiniciar el VPS. La primera construcción tarda unos minutos.
 El contenedor tiene un límite de 768 MB; dejá memoria adicional para Dokploy y
@@ -105,6 +157,12 @@ cambios: `docker compose up -d --build`.
 - **Spotify reproduce otra versión:** el buscador utiliza el título público;
   usá un enlace directo de YouTube para seleccionar exactamente la grabación.
 - **Se reinicia por memoria:** revisá los logs y aumentá `mem_limit` si es necesario.
+- **Radio reconectando:** comprobá el enlace `/listen/`, la disponibilidad de la
+  emisora y el acceso de red desde el VPS. Usá `!radio <otro enlace>` para cambiarla.
+- **No guarda la radio:** revisá que `/app/data` tenga el volumen `radio_data`
+  montado y permita escribir al usuario `bot` del contenedor.
+- **No retoma la radio:** verificá que se conservó el volumen, que el canal de voz
+  todavía existe y que el bot tiene permisos Conectar / Hablar.
 
 ## Desarrollo y comprobaciones
 

@@ -7,7 +7,7 @@ COPY --from=deno /deno /usr/local/bin/deno
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN useradd --create-home bot
-COPY bot.py media.py ./
+RUN useradd --create-home bot && mkdir -p /app/data && chown bot:bot /app/data
+COPY bot.py media.py radio.py state.py ./
 USER bot
 CMD ["python", "bot.py"]

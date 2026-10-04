@@ -5,9 +5,15 @@ services:
     init: true
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:?Configura DISCORD_TOKEN}
+      RADIO_STATE_FILE: /app/data/radio.json
+    volumes:
+      - radio_data:/app/data
     mem_limit: 768m
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  radio_data:
