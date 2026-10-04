@@ -1,4 +1,4 @@
-FROM denoland/deno:bin-2.7.1 AS deno
+FROM denoland/deno:bin-2.9.7 AS deno
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libopus0 ca-certificates \
