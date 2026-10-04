@@ -128,8 +128,35 @@ needed; Discord voice requires outbound network connectivity.
 - Continuous radio requires an available host, Discord connection, and station.
   Automatic recovery does not guarantee uninterrupted service.
 
-AstraMusic is an independent project, unaffiliated with Discord, YouTube,
-Spotify, or Radio Garden. Use media you are authorized to play.
+## Legal use and responsibility
+
+AstraMusic is an open-source project intended to be installed and run on your own
+infrastructure. This repository distributes source code; it does not include
+music recordings or grant permissions to use third-party content.
+
+The project is independent and is not affiliated with, sponsored by, or endorsed
+by Discord, YouTube, Spotify, or Radio Garden.
+
+Anyone installing or using the software must verify that they have the necessary
+permissions to access, play, or retransmit their chosen content, and comply with
+applicable laws and the relevant services' terms. Content being accessible through
+a link does not imply permission to retransmit it.
+
+The software is provided as is, subject to the warranty disclaimers and limitations
+of liability in the [MIT license](LICENSE), to the extent permitted by applicable
+law. The authors do not control third-party installations or endorse uses that
+infringe others' rights or service terms.
+
+The MIT license covers the project's code; it does not grant licenses to music,
+broadcasts, trademarks, or external services. This notice does not certify legal
+compliance or replace permissions required from providers and rights holders.
+
+Official provider references:
+
+- [Discord Developer Terms of Service](https://support-dev.discord.com/hc/en-us/articles/8562894815383-Discord-Developer-Terms-of-Service)
+- [YouTube Terms of Service](https://www.youtube.com/static?template=terms)
+- [Spotify Widget Terms of Use](https://developer.spotify.com/documentation/embeds/terms)
+- [Radio Garden contact](https://radio.garden/settings/contact) for questions about using the service.
 
 ## Development
 

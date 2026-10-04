@@ -132,8 +132,38 @@ dominio ni reverse proxy; Discord necesita conectividad saliente para voz.
 - La radio continua requiere un host, una conexión a Discord y una emisora
   disponibles. La recuperación automática no garantiza un servicio sin cortes.
 
-AstraMusic es un proyecto independiente, sin afiliación con Discord, YouTube,
-Spotify o Radio Garden. Usá contenido que tengas autorización para reproducir.
+## Uso legal y responsabilidad
+
+AstraMusic es un proyecto de código abierto para instalar y ejecutar en
+infraestructura propia. Este repositorio distribuye código fuente; no incluye
+grabaciones musicales ni otorga permisos sobre contenido de terceros.
+
+El proyecto es independiente y no está afiliado, patrocinado ni respaldado por
+Discord, YouTube, Spotify o Radio Garden.
+
+Quien instala o utiliza el software debe verificar que cuenta con las
+autorizaciones necesarias para acceder, reproducir o retransmitir el contenido
+elegido, y cumplir la legislación y los términos de los servicios correspondientes.
+Que un contenido sea accesible mediante un enlace no implica autorización para
+retransmitirlo.
+
+El software se proporciona tal como está, con las exclusiones de garantía y
+limitaciones de responsabilidad establecidas en la [licencia MIT](LICENSE), en
+la medida permitida por la legislación aplicable. Los autores no controlan las
+instalaciones de terceros ni avalan usos que infrinjan derechos o condiciones de
+otros servicios.
+
+La licencia MIT cubre el código del proyecto; no concede licencias sobre música,
+transmisiones, marcas ni servicios externos. Este aviso no certifica el
+cumplimiento legal ni reemplaza los permisos necesarios de proveedores y titulares
+de derechos.
+
+Referencias oficiales de los proveedores:
+
+- [Términos para desarrolladores de Discord](https://support-dev.discord.com/hc/en-us/articles/8562894815383-Discord-Developer-Terms-of-Service)
+- [Términos de servicio de YouTube](https://www.youtube.com/static?template=terms)
+- [Términos de uso de widgets de Spotify](https://developer.spotify.com/documentation/embeds/terms)
+- [Contacto de Radio Garden](https://radio.garden/settings/contact) para consultas sobre el uso del servicio.
 
 ## Desarrollo
 
