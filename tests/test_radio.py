@@ -182,6 +182,19 @@ class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
         bot.players[123] = player
         return player
 
+    def protocol(self, *, expected_disconnect=False):
+        # Exercise our real protocol hook without starting sockets or Discord.
+        client = object.__new__(bot.RadioVoiceClient)
+        client.channel = self.voice_channel
+        self.voice_channel.guild = self.guild
+        client._player = None
+        client._connection = MagicMock()
+        client._connection._expecting_disconnect = expected_disconnect
+        client._connection.is_connected.return_value = True
+        client._connection.voice_state_update = AsyncMock()
+        client.disconnect = AsyncMock()
+        return client
+
     async def wait_for(self, predicate):
         async with asyncio.timeout(2):
             while not predicate():
@@ -312,7 +325,8 @@ class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
             await self.wait_for(lambda: self.voice_channel.connect.await_count == 1)
             await bot.on_ready()
             self.assertIs(bot.players[123], first)
-            self.voice_channel.connect.assert_awaited_once_with(timeout=30, reconnect=True, self_deaf=True)
+            self.voice_channel.connect.assert_awaited_once_with(timeout=30, reconnect=True, self_deaf=True,
+                                                               cls=bot.RadioVoiceClient)
 
     async def test_reconnect_failure_can_be_stopped_without_deadlock(self):
         self.store.set(123, CONFIG)
@@ -372,22 +386,19 @@ class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(player.radio_status, "pausada por canciones")
             self.assertEqual(RadioStore(self.store.path).get(123)["link"], replacement["link"])
 
-    async def test_disconnect_event_recovers_voice_without_losing_radio(self):
+    async def test_transient_voice_failure_recovers_without_losing_radio(self):
         self.store.set(123, CONFIG)
         new_voice = MagicMock()
         new_voice.is_connected.return_value = True
         new_voice.disconnect = AsyncMock()
         self.voice_channel.connect.return_value = new_voice
-        connection = MagicMock(user=SimpleNamespace(id=999))
-        with patch.object(bot.bot, "_connection", connection), patch.object(bot.bot, "is_ready", return_value=True), \
+        with patch.object(bot.bot, "is_ready", return_value=True), \
                 patch.object(bot, "VOICE_CHECK_INTERVAL", 0.005), patch.object(bot, "RADIO_RETRY_INITIAL", 0.005), \
                 patch.object(bot, "resolve_stream", new=AsyncMock(return_value="https://station.example/live")), \
                 patch.object(bot.discord, "FFmpegPCMAudio"):
             player = self.player()
             await self.wait_for(lambda: self.voice.play.call_count == 1)
             self.voice.is_connected.return_value = False
-            await bot.on_voice_state_update(SimpleNamespace(id=999, guild=self.guild),
-                                            SimpleNamespace(channel=self.voice_channel), SimpleNamespace(channel=None))
             await self.wait_for(lambda: new_voice.play.call_count == 1)
             self.assertIs(bot.players[123], player)
             self.assertIs(player.voice, new_voice)
@@ -416,6 +427,136 @@ class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
             self.assertIs(player.current, current)
             self.assertFalse(current.cancelled())
             self.assertIsNotNone(player.radio)
+
+    async def test_last_listener_leaving_keeps_radio_playing_past_idle_timeout(self):
+        self.store.set(123, CONFIG)
+        connection = MagicMock(user=SimpleNamespace(id=999))
+        with patch.object(bot.bot, "_connection", connection), patch.object(bot, "IDLE_TIMEOUT", 0.01), \
+                patch.object(bot, "resolve_stream", new=AsyncMock(return_value="https://station.example/live")), \
+                patch.object(bot.discord, "FFmpegPCMAudio") as source:
+            player = self.player()
+            await self.wait_for(lambda: self.voice.play.call_count == 1)
+            self.voice_channel.members = []
+            await bot.on_voice_state_update(SimpleNamespace(id=1000, guild=self.guild),
+                                            SimpleNamespace(channel=self.voice_channel), SimpleNamespace(channel=None))
+            await asyncio.sleep(0.04)
+            self.assertEqual(player.radio_status, "sonando")
+            self.assertFalse(player.closing)
+            self.assertEqual(self.store.get(123), CONFIG)
+            self.voice.disconnect.assert_not_awaited()
+            source.return_value.cleanup.assert_not_called()
+
+    async def test_external_kick_stops_worker_and_disables_radio_after_restart(self):
+        self.store.set(123, CONFIG)
+        protocol = self.protocol()
+        self.guild.voice_client = protocol
+        with patch.object(bot, "resolve_stream", new=AsyncMock(side_effect=blocked_stream)) as resolver, \
+                patch.object(bot.bot, "get_guild", return_value=self.guild):
+            player = self.player(voice=protocol)
+            await self.wait_for(lambda: resolver.await_count == 1)
+            await asyncio.wait_for(protocol.on_voice_state_update({"channel_id": None}), 1)
+            self.assertTrue(player.worker.done())
+            self.assertIsNone(player.radio)
+            self.assertNotIn(123, bot.players)
+            self.assertIsNone(RadioStore(self.store.path).get(123))
+            await bot.on_ready()
+            self.assertNotIn(123, bot.players)
+            self.voice_channel.connect.assert_not_awaited()
+            protocol.disconnect.assert_not_awaited()
+            protocol._connection.voice_state_update.assert_awaited_once_with({"channel_id": None})
+
+    async def test_internal_voice_disconnect_preserves_active_radio(self):
+        self.store.set(123, CONFIG)
+        protocol = self.protocol(expected_disconnect=True)
+        self.guild.voice_client = protocol
+        with patch.object(bot, "resolve_stream", new=AsyncMock(side_effect=blocked_stream)) as resolver:
+            player = self.player(voice=protocol)
+            await self.wait_for(lambda: resolver.await_count == 1)
+            await protocol.on_voice_state_update({"channel_id": None})
+            self.assertFalse(player.closing)
+            self.assertIs(bot.players[123], player)
+            self.assertEqual(self.store.get(123), CONFIG)
+            protocol._connection.voice_state_update.assert_awaited_once()
+
+    async def test_old_voice_client_cannot_disable_new_radio_session(self):
+        self.store.set(123, CONFIG)
+        old = self.protocol()
+        with patch.object(bot, "resolve_stream", new=AsyncMock(side_effect=blocked_stream)):
+            player = self.player()
+            await old.on_voice_state_update({"channel_id": None})
+            self.assertFalse(player.closing)
+            self.assertIs(bot.players[123], player)
+            self.assertEqual(self.store.get(123), CONFIG)
+
+    async def test_kick_cancels_pending_radio_request(self):
+        self.store.set(123, CONFIG)
+        protocol = self.protocol()
+        self.guild.voice_client = protocol
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def station(link):
+            started.set()
+            await release.wait()
+            return {"link": LINK, "title": "Test Radio"}
+
+        with patch.object(bot, "resolve_stream", new=AsyncMock(side_effect=blocked_stream)), \
+                patch.object(bot, "get_station", side_effect=station):
+            player = self.player(voice=protocol)
+            request = asyncio.create_task(bot.radio_command.callback(self.ctx, value=LINK))
+            try:
+                await asyncio.wait_for(started.wait(), 1)
+                await asyncio.wait_for(protocol.on_voice_state_update({"channel_id": None}), 1)
+                release.set()
+                await asyncio.wait_for(request, 1)
+            finally:
+                request.cancel()
+            self.assertTrue(player.worker.done())
+            self.assertNotIn(123, bot.players)
+            self.assertIsNone(self.store.get(123))
+
+    async def test_kick_during_reconnection_does_not_deadlock_or_rejoin(self):
+        self.store.set(123, CONFIG)
+        protocol = self.protocol()
+        self.voice.is_connected.return_value = False
+        connecting = asyncio.Event()
+
+        async def connect(**kwargs):
+            self.guild.voice_client = protocol
+            connecting.set()
+            await asyncio.Event().wait()
+
+        self.voice_channel.connect.side_effect = connect
+        with patch.object(bot.bot, "is_ready", return_value=True):
+            player = self.player()
+            await asyncio.wait_for(connecting.wait(), 1)
+            await asyncio.wait_for(protocol.on_voice_state_update({"channel_id": None}), 1)
+            self.assertTrue(player.worker.done())
+            self.assertNotIn(123, bot.players)
+            self.assertIsNone(self.store.get(123))
+            self.assertEqual(self.voice_channel.connect.await_count, 1)
+
+    async def test_kick_stops_playback_even_if_persistence_fails(self):
+        self.store.set(123, CONFIG)
+        protocol = self.protocol()
+        self.guild.voice_client = protocol
+        with patch.object(bot, "resolve_stream", new=AsyncMock(side_effect=blocked_stream)), \
+                patch.object(self.store, "remove", side_effect=ValueError("unwritable")):
+            player = self.player(voice=protocol)
+            await protocol.on_voice_state_update({"channel_id": None})
+            self.assertTrue(player.worker.done())
+            self.assertNotIn(123, bot.players)
+            self.assertIsNone(self.store.get(123))
+            self.assertIn("No pude guardar", self.text.send.call_args.args[0])
+
+    async def test_removal_from_server_disables_saved_radio(self):
+        self.store.set(123, CONFIG)
+        with patch.object(bot, "resolve_stream", new=AsyncMock(side_effect=blocked_stream)):
+            player = self.player()
+            await bot.on_guild_remove(self.guild)
+            self.assertTrue(player.worker.done())
+            self.assertNotIn(123, bot.players)
+            self.assertIsNone(RadioStore(self.store.path).get(123))
+            self.voice.disconnect.assert_awaited_once()
 
 
 if __name__ == "__main__":

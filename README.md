@@ -43,7 +43,11 @@ El bot obtiene el stream original y lo reproduce con FFmpeg, sin descargarlo.
 
 Con la radio activa permanece conectado incluso si el canal está vacío. Si el
 stream falla o termina, obtiene un enlace actualizado y reintenta con esperas
-de 5, 10, 20, 40 y hasta 60 segundos; también recupera la conexión de voz.
+de 5, 10, 20, 40 y hasta 60 segundos; también recupera cortes transitorios de voz.
+Si alguien lo desconecta del canal o lo expulsa del servidor, apaga la radio y
+borra la configuración guardada: no vuelve a entrar ni la retoma al reiniciar.
+Para activarla de nuevo, entrá al canal y mandá otra vez `!radio <enlace>`.
+Los reinicios normales del contenedor siguen retomando la radio activa.
 Solo quienes están en el mismo canal de voz pueden cambiarla o detenerla.
 Si movés al bot a otro canal de voz, guarda ese canal como el nuevo destino.
 
@@ -114,6 +118,8 @@ Para probar la radio después de actualizar y hacer **Deploy**:
 4. Reiniciá el servicio y verificá que retoma la radio sin volver a mandar el
    enlace. En los logs aparece `Restoring radio for guild ...`.
 5. Usá `!stop` y reiniciá otra vez: ahora debe quedar desactivada.
+6. Volvé a activar la radio y desconectá al bot del canal desde Discord: debe
+   quedar apagada y no volver a entrar, incluso después de reiniciar el servicio.
 
 Conservá el volumen `radio_data` del Compose durante los despliegues. No hace
 falta configurar claves de Radio Garden ni permisos adicionales de Discord.

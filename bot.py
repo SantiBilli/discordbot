@@ -29,6 +29,52 @@ RADIO_RETRY_MAX = 60
 VOICE_CHECK_INTERVAL = 5
 
 
+def forget_removed_radio(guild_id):
+    try:
+        radio_store.remove(guild_id)
+        return True
+    except ValueError:
+        # A kick must stop playback even if the volume has become unwritable.
+        radio_store.entries.pop(str(guild_id), None)
+        log.error("Could not persist radio shutdown after removal for guild %s", guild_id)
+        return False
+
+
+class RadioVoiceClient(discord.VoiceClient):
+    async def on_voice_state_update(self, data):
+        # discord.py 2.7.1 sets this flag for its own disconnect/reconnect flow.
+        # Read it before super consumes it; the Member event runs too late.
+        external = data["channel_id"] is None and not self._connection._expecting_disconnect
+        player = players.get(self.guild.id)
+        if (not external or not player or player.closing
+                or (player.voice is not self and self.guild.voice_client is not self)):
+            await super().on_voice_state_update(data)
+            return
+
+        # Stop the worker before awaiting the library, so it cannot rejoin first.
+        player.closing = True
+        player.worker.cancel()
+        radio_requests[self.guild.id] = radio_requests.get(self.guild.id, 0) + 1
+        had_radio = bool(player.radio)
+        saved = True
+        async with locks.setdefault(self.guild.id, asyncio.Lock()):
+            if players.get(self.guild.id) is player:
+                saved = forget_removed_radio(self.guild.id)
+                players.pop(self.guild.id, None)
+                player.radio = None
+                player.radio_status = "desactivada"
+            try:
+                await super().on_voice_state_update(data)
+            finally:
+                # The library has already disconnected and cleaned up this client.
+                await player.close(disconnect=False)
+        if had_radio:
+            message = "📻 Radio desactivada porque me desconectaron del canal. Para volver a activarla, usá !radio <enlace>."
+            if not saved:
+                message += " No pude guardar la desactivación: revisá los permisos del volumen antes de reiniciar."
+            await player.announce(player.radio_channel, message)
+
+
 class PlaybackQueue(asyncio.Queue):
     def __init__(self, wake, **kwargs):
         super().__init__(**kwargs)
@@ -75,6 +121,8 @@ class Player:
         self.interrupt_radio()
 
     async def ensure_voice(self):
+        if self.closing:
+            raise asyncio.CancelledError
         if self.voice and self.voice.is_connected():
             return
         if not self.radio:
@@ -95,7 +143,7 @@ class Player:
                 existing = self.guild.voice_client
                 if existing:
                     await existing.disconnect(force=True)
-                self.voice = await channel.connect(timeout=30, reconnect=True, self_deaf=True)
+                self.voice = await channel.connect(timeout=30, reconnect=True, self_deaf=True, cls=RadioVoiceClient)
             finally:
                 self.reconnecting = False
 
@@ -219,7 +267,7 @@ class Player:
             if self.voice:
                 self.voice.stop()
 
-    async def close(self):
+    async def close(self, *, disconnect=True):
         self.closing = True
         self.worker.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -227,7 +275,7 @@ class Player:
         while not self.queue.empty():
             self.queue.get_nowait()
             self.queue.task_done()
-        if self.voice:
+        if disconnect and self.voice:
             await self.voice.disconnect(force=True)
 
 
@@ -268,7 +316,7 @@ async def play_command(ctx, *, link: str):
         if not player:
             check_permissions(channel, ctx.guild)
             try:
-                voice = await channel.connect(timeout=30, reconnect=True, self_deaf=True)
+                voice = await channel.connect(timeout=30, reconnect=True, self_deaf=True, cls=RadioVoiceClient)
             except Exception:
                 if ctx.voice_client:
                     await ctx.voice_client.disconnect(force=True)
@@ -326,7 +374,7 @@ async def radio_command(ctx, *, value: str = "estado"):
         else:
             players[ctx.guild.id] = Player(ctx.guild, ctx.voice_client, radio=config, radio_channel=ctx.channel)
         title = discord.utils.escape_markdown(station["title"])
-        await ctx.send(f"📻 Radio 24/7 activada: **{title}**. Se reproducirá cuando no haya canciones en la cola.\n{station['link']}")
+        await ctx.send(f"📻 Radio 24/7 activada: **{title}**. Me quedo conectado aunque el canal quede vacío; la radio vuelve al terminar la cola.\n{station['link']}")
 
 
 @bot.command(name="skip")
@@ -407,6 +455,17 @@ async def on_voice_state_update(member, before, after):
                 else:
                     players.pop(member.guild.id, None)
                     await player.close()
+
+
+@bot.event
+async def on_guild_remove(guild):
+    async with locks.setdefault(guild.id, asyncio.Lock()):
+        radio_requests[guild.id] = radio_requests.get(guild.id, 0) + 1
+        forget_removed_radio(guild.id)
+        player = players.pop(guild.id, None)
+        if player:
+            player.radio = None
+            await player.close()
 
 
 @bot.event
