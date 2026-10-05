@@ -113,6 +113,7 @@ La configuración de radio es persistente; las colas se pierden al reiniciar el 
 | --- | --- | --- |
 | `DISCORD_TOKEN` | Sí, para ejecutar el bot | Token de tu bot de Discord. Las pruebas no lo necesitan. |
 | `RADIO_STATE_FILE` | No | `data/radio.json` localmente; Compose configura `/app/data/radio.json`. |
+| `RADIO_AD_KEYWORDS` | No | Palabras completas separadas por coma; la radio se silencia mientras el título del stream (metadatos ICY) coincida con alguna. Vacío lo desactiva. Solo funciona con emisoras que identifican sus tandas. |
 
 Compose monta el volumen `radio_data` en `/app/data`. Conservalo al desplegar.
 `docker compose down` lo mantiene; `docker compose down -v` lo elimina.

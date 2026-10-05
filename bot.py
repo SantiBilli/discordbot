@@ -9,7 +9,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from media import normalize_link, resolve
-from radio import get_station, normalize_radio_link, resolve_stream
+from radio import DEFAULT_AD_KEYWORDS, ad_pattern, get_station, icy_titles, normalize_radio_link, resolve_stream
 from state import RadioStore
 
 load_dotenv()
@@ -27,6 +27,24 @@ IDLE_TIMEOUT = 120
 RADIO_RETRY_INITIAL = 5
 RADIO_RETRY_MAX = 60
 VOICE_CHECK_INTERVAL = 5
+# Empty RADIO_AD_KEYWORDS disables ad muting.
+AD_PATTERN = ad_pattern(os.getenv("RADIO_AD_KEYWORDS", DEFAULT_AD_KEYWORDS))
+
+
+class MutableSource(discord.AudioSource):
+    """Keeps consuming the live stream while sending silence, so muting skips the ad in time."""
+    SILENCE = b"\x00" * 3840  # one 20 ms frame of 48 kHz stereo PCM
+
+    def __init__(self, original):
+        self.original = original
+        self.muted = False
+
+    def read(self):
+        data = self.original.read()
+        return self.SILENCE if self.muted and data else data
+
+    def cleanup(self):
+        self.original.cleanup()
 
 
 def forget_removed_radio(guild_id):
@@ -147,8 +165,25 @@ class Player:
             finally:
                 self.reconnecting = False
 
+    async def mute_ads(self, url, source):
+        """Mute while the station's ICY title looks like an ad; fail open if metadata stops."""
+        try:
+            async for title in icy_titles(url):
+                ad = bool(AD_PATTERN.search(title))
+                if ad != source.muted:
+                    source.muted = ad
+                    self.radio_status = "publicidad (silenciada)" if ad else "sonando"
+                    log.info("Radio ad %s for guild %s", "muted" if ad else "ended", self.guild.id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            log.info("Radio ICY metadata unavailable: %s", type(error).__name__)
+        finally:
+            source.muted = False
+
     async def audio(self, info, channel=None, *, live=False):
         source = None
+        watcher = None
         voice = self.voice
         try:
             if not voice or not voice.is_connected():
@@ -168,9 +203,13 @@ class Player:
                 before += " -protocol_whitelist http,https,tcp,tls,crypto"
             source = discord.FFmpegPCMAudio(info["url"], before_options=before,
                                            options="-vn -loglevel error", stderr=subprocess.DEVNULL)
+            if live and AD_PATTERN:
+                source = MutableSource(source)
             voice.play(source, after=after)
             if live:
                 self.radio_status = "sonando"
+                if AD_PATTERN:
+                    watcher = asyncio.create_task(self.mute_ads(info["url"], source))
             else:
                 title = discord.utils.escape_markdown(info.get("title", "Canción"))[:180]
                 await self.announce(channel, f"🎶 Sonando: **{title}**\n{info.get('webpage_url', '')}")
@@ -183,6 +222,10 @@ class Player:
             if errors:
                 raise errors[0]
         finally:
+            if watcher:
+                watcher.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await watcher
             if voice:
                 voice.stop()
             if source:
