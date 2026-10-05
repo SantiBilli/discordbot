@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import socket
 import tempfile
@@ -110,6 +111,69 @@ class RadioResolverTests(unittest.IsolatedAsyncioTestCase):
                 await radio.validate_stream_url(url)
 
 
+def icy_response(interval, *blocks):
+    """Fake stream: `interval` audio bytes, then one metadata block per entry (None = empty)."""
+    data = b""
+    for block in blocks:
+        data += b"a" * interval
+        if block is None:
+            data += b"\x00"
+        else:
+            padded = block + b"\x00" * (-len(block) % 16)
+            data += bytes([len(padded) // 16]) + padded
+    buffer = bytearray(data)
+
+    async def readexactly(count):
+        if len(buffer) < count:
+            raise asyncio.IncompleteReadError(bytes(buffer), count)
+        chunk = bytes(buffer[:count])
+        del buffer[:count]
+        return chunk
+
+    result = response(headers={"icy-metaint": str(interval)})
+    result.content.readexactly = readexactly
+    return result
+
+
+class AdDetectionTests(unittest.IsolatedAsyncioTestCase):
+    def test_keywords_match_whole_words_only(self):
+        pattern = radio.ad_pattern(radio.DEFAULT_AD_KEYWORDS)
+        for title in ["Publicidad", "Tanda comercial - Radio", "Spot 12", "AD: advertising break"]:
+            with self.subTest(title=title):
+                self.assertTrue(pattern.search(title))
+        for title in ["Spotify Wrapped", "Hotspot - Artist", "Artist - Song", ""]:
+            with self.subTest(title=title):
+                self.assertFalse(pattern.search(title))
+        self.assertIsNone(radio.ad_pattern(" , "))
+
+    async def collect(self, stream):
+        session = session_with(stream)
+        titles = []
+        with patch.object(radio.aiohttp, "ClientSession", return_value=session):
+            # The fake stream ends with IncompleteReadError, like a dropped connection.
+            with contextlib.suppress(asyncio.IncompleteReadError):
+                async for title in radio.icy_titles("https://station.example/live"):
+                    titles.append(title)
+        return titles
+
+    async def test_reads_titles_and_ignores_empty_blocks(self):
+        titles = await self.collect(icy_response(
+            16, b"StreamTitle='Artist - Song';", None, b"StreamTitle='Publicidad';StreamUrl='';"))
+        self.assertEqual(titles, ["Artist - Song", "Publicidad"])
+
+    async def test_requests_metadata_without_following_redirects(self):
+        session = session_with(icy_response(16))
+        with patch.object(radio.aiohttp, "ClientSession", return_value=session):
+            with contextlib.suppress(asyncio.IncompleteReadError):
+                async for _ in radio.icy_titles("https://station.example/live"):
+                    pass
+        session.get.assert_called_once_with("https://station.example/live",
+                                            headers={"Icy-MetaData": "1"}, allow_redirects=False)
+
+    async def test_station_without_metadata_ends_quietly(self):
+        self.assertEqual(await self.collect(response(headers={})), [])
+
+
 class RadioStoreTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -149,6 +213,14 @@ class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
         self.store = RadioStore(Path(self.temp.name) / "radio.json")
         self.store_patch = patch.object(bot, "radio_store", self.store)
         self.store_patch.start()
+
+        async def no_titles(url):
+            return
+            yield
+
+        # Keep these tests off the network; ad muting has its own tests.
+        self.icy_patch = patch.object(bot, "icy_titles", no_titles)
+        self.icy_patch.start()
         self.voice = MagicMock()
         self.voice.is_connected.return_value = True
         self.voice.disconnect = AsyncMock()
@@ -172,6 +244,7 @@ class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
         bot.players.clear()
         bot.locks.clear()
         bot.radio_requests.clear()
+        self.icy_patch.stop()
         self.store_patch.stop()
         self.temp.cleanup()
 
@@ -241,6 +314,41 @@ class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(player.radio_status, "sonando")
             self.assertGreaterEqual(source.return_value.cleanup.call_count, 2)
             self.assertIn("-reconnect_at_eof 1", source.call_args.kwargs["before_options"])
+
+    async def test_radio_is_silenced_only_during_ads_and_fails_open(self):
+        gate = asyncio.Event()
+
+        async def titles(url):
+            yield "Artist - Song"
+            yield "Publicidad"
+            await gate.wait()
+            yield "Artist - Song"
+            raise ConnectionError
+
+        original = MagicMock()
+        original.read.return_value = b"\x01" * 3840
+        self.voice.play.side_effect = lambda source, after: None
+        with patch.object(bot, "resolve_stream", new=AsyncMock(return_value="https://station.example/live")), \
+                patch.object(bot, "icy_titles", titles), patch.object(bot.discord, "FFmpegPCMAudio", return_value=original):
+            player = self.player()
+            await self.wait_for(lambda: player.radio_status == "publicidad (silenciada)")
+            source = self.voice.play.call_args.args[0]
+            self.assertEqual(source.read(), bot.MutableSource.SILENCE)
+            gate.set()
+            await self.wait_for(lambda: player.radio_status == "sonando")
+            self.assertEqual(source.read(), b"\x01" * 3840)
+            original.read.return_value = b""
+            source.muted = True
+            self.assertEqual(source.read(), b"")
+
+    async def test_ad_muting_can_be_disabled(self):
+        with patch.object(bot, "AD_PATTERN", None), patch.object(bot, "icy_titles") as titles, \
+                patch.object(bot, "resolve_stream", new=AsyncMock(return_value="https://station.example/live")), \
+                patch.object(bot.discord, "FFmpegPCMAudio") as source:
+            self.player()
+            await self.wait_for(lambda: self.voice.play.call_count == 1)
+            titles.assert_not_called()
+            self.assertIs(self.voice.play.call_args.args[0], source.return_value)
 
     async def test_music_interrupts_retry_wait_immediately(self):
         calls = []

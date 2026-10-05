@@ -109,6 +109,7 @@ Radio preferences persist; music queues do not survive process restarts.
 | --- | --- | --- |
 | `DISCORD_TOKEN` | Yes, to run the bot | Your own Discord bot token. Tests do not need it. |
 | `RADIO_STATE_FILE` | No | `data/radio.json` locally; Compose sets `/app/data/radio.json`. |
+| `RADIO_AD_KEYWORDS` | No | Comma-separated whole words; the radio is muted while the station's stream title (ICY metadata) matches one. Empty disables it. Only works for stations that label their ad breaks. |
 
 Compose mounts the named volume `radio_data` at `/app/data`. Preserve it when
 redeploying. `docker compose down` keeps it; `docker compose down -v` deletes it.

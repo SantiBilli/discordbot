@@ -51,6 +51,41 @@ async def validate_stream_url(url: str) -> None:
         raise ValueError("El stream debe estar alojado en una dirección pública.")
 
 
+DEFAULT_AD_KEYWORDS = "publicidad,comercial,comerciales,spot,anuncio,tanda,advertisement,advertising,commercial"
+MAX_ICY_INTERVAL = 1 << 20
+
+
+def ad_pattern(keywords: str) -> re.Pattern | None:
+    """Whole-word, case-insensitive matcher for stream titles; None disables detection."""
+    words = [word.strip() for word in keywords.split(",") if word.strip()]
+    if not words:
+        return None
+    return re.compile(r"(?<!\w)(?:" + "|".join(map(re.escape, words)) + r")(?!\w)", re.IGNORECASE)
+
+
+async def icy_titles(url: str):
+    """Yield each new in-band ICY StreamTitle. Ends quietly if the station sends no metadata."""
+    timeout = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=30)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url, headers={"Icy-MetaData": "1"}, allow_redirects=False) as response:
+            response.raise_for_status()
+            try:
+                interval = int(response.headers.get("icy-metaint", 0))
+            except ValueError:
+                return
+            if not 0 < interval <= MAX_ICY_INTERVAL:
+                return
+            while True:
+                await response.content.readexactly(interval)
+                length = (await response.content.readexactly(1))[0] * 16
+                if not length:
+                    continue
+                block = await response.content.readexactly(length)
+                match = re.search(rb"StreamTitle='(.*?)';", block, re.DOTALL)
+                if match:
+                    yield match[1].decode("utf-8", "replace").strip()[:200]
+
+
 async def resolve_stream(link: str) -> str:
     """Follow redirects ourselves and close the live response after reading headers."""
     station_id, _ = normalize_radio_link(link)

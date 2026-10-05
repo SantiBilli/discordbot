@@ -6,6 +6,8 @@ services:
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN:?Configura DISCORD_TOKEN}
       RADIO_STATE_FILE: /app/data/radio.json
+      # "-" keeps the default only when unset; an empty value disables ad muting.
+      RADIO_AD_KEYWORDS: ${RADIO_AD_KEYWORDS-publicidad,comercial,comerciales,spot,anuncio,tanda,advertisement,advertising,commercial}
     volumes:
       - radio_data:/app/data
     mem_limit: 768m
