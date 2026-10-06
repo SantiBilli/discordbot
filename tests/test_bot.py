@@ -24,6 +24,8 @@ class LinkTests(unittest.TestCase):
 
 class PlaybackTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        self.nickname_patch = patch.object(bot, "nicknames", MagicMock())
+        self.nickname_patch.start()
         self.guild = SimpleNamespace(id=123)
         bot.locks[123] = asyncio.Lock()
         self.voice = MagicMock()
@@ -36,6 +38,7 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         await self.player.close()
         bot.players.clear()
         bot.locks.clear()
+        self.nickname_patch.stop()
 
     async def wait_for(self, predicate):
         async with asyncio.timeout(2):

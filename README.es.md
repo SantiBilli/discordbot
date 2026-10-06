@@ -22,6 +22,8 @@ van. Se despliega con Docker Compose o Dokploy.
 - **Recuperación automática:** actualiza los enlaces de transmisión y reintenta
   los cortes con esperas progresivas, hasta 60 segundos.
 - **Controles de voz:** solo quienes están en el canal configurado pueden cambiar o detener la reproducción.
+- **Apodo de reproducción:** muestra la canción o emisora en el apodo del bot
+  dentro del servidor y recupera el apodo anterior al detenerse.
 - **Despliegue con Docker:** contenedor sin privilegios de root, volumen
   persistente, política de reinicio y rotación de logs.
 
@@ -67,9 +69,43 @@ disponible en [inglés](docs/deployment.md).
 3. Activá **Message Content Intent** en **Privileged Gateway Intents**. Los
    comandos usan el prefijo `!`; no hacen falta los intents de miembros o presencia.
 4. En **OAuth2 → URL Generator**, elegí el scope **bot** y estos permisos:
-   **View Channels**, **Send Messages**, **Connect** y **Speak**.
+   **View Channels**, **Send Messages**, **Connect**, **Speak** y **Change Nickname**.
 5. Abrí la URL generada e invitá el bot a tu servidor. No necesita permiso de
    Administrador. Revisá también los permisos específicos de cada canal.
+
+Si el bot ya está instalado, abrí **Ajustes del servidor → Roles**, elegí un rol
+asignado al bot y activá **Cambiar apodo / Change Nickname**. Marcar permisos en
+el generador de URL del Developer Portal no actualiza por sí solo un rol de un
+servidor existente. El audio sigue funcionando sin este permiso; los apodos
+automáticos esperan hasta que se habilite. No hacen falta un token nuevo ni
+intents privilegiados adicionales para los apodos.
+
+## Apodo de reproducción
+
+El bot usa automáticamente `🎵 <título de canción>` para música y `📻 <nombre de
+emisora>` para radio. Una canción de la cola reemplaza temporalmente el apodo de
+la radio; el nombre de la emisora vuelve al retomar la transmisión. La búsqueda
+de audio y la reconexión de radio muestran estados breves. Para radio, se muestra
+la emisora, no la canción individual que esté transmitiendo.
+
+Los apodos son independientes por servidor y aparecen en el canal de voz, la
+lista de miembros y los mensajes. Los títulos largos se acortan con `…` para
+respetar el límite de 32 caracteres de Discord; el título completo de la canción
+se mantiene en el anuncio de reproducción.
+
+Cuando la cola queda vacía sin radio activa, o después de `!stop` o una
+desconexión externa de voz, recupera el apodo anterior del servidor. Si no tenía
+apodo, elimina el temporal. Los originales se guardan junto a `RADIO_STATE_FILE`
+(`data/radio.nicknames.json` por defecto), para que un reinicio no convierta el
+título de una canción en el nuevo nombre permanente.
+
+Las actualizaciones ocurren en segundo plano y agrupan cambios rápidos. Los
+límites de Discord pueden demorar un cambio o la restauración; esa espera no
+retrasa el audio ni los comandos. Conservá permisos de escritura en el directorio
+de estado para guardar los apodos originales de forma segura.
+
+Consultá los [permisos de apodos](https://support.discord.com/hc/en-us/articles/219070107-Server-Nicknames)
+y los [límites de Discord](https://docs.discord.com/developers/resources/user#usernames-and-nicknames).
 
 ## Comandos
 

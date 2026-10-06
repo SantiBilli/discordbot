@@ -9,8 +9,9 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from media import normalize_link, resolve
+from nickname import NicknameManager
 from radio import get_station, normalize_radio_link, resolve_stream
-from state import RadioStore
+from state import NicknameStore, RadioStore
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -23,6 +24,12 @@ players = {}
 locks = {}
 radio_requests = {}
 radio_store = RadioStore(os.getenv("RADIO_STATE_FILE", "data/radio.json"))
+try:
+    nickname_store = NicknameStore(radio_store.path.with_suffix(".nicknames.json"))
+except RuntimeError:
+    nickname_store = None
+    log.error("Could not read original nicknames; automatic nicknames disabled. Repair the preserved nickname state file.")
+nicknames = NicknameManager(nickname_store)
 IDLE_TIMEOUT = 120
 RADIO_RETRY_INITIAL = 5
 RADIO_RETRY_MAX = 60
@@ -169,6 +176,7 @@ class Player:
             source = discord.FFmpegPCMAudio(info["url"], before_options=before,
                                            options="-vn -loglevel error", stderr=subprocess.DEVNULL)
             voice.play(source, after=after)
+            nicknames.show(self.guild, info.get("title"), radio=live)
             if live:
                 self.radio_status = "sonando"
             else:
@@ -190,6 +198,7 @@ class Player:
 
     async def play(self, link, channel):
         try:
+            nicknames.show(self.guild, "Buscando audio…")
             info = await resolve(link)
             await self.ensure_voice()
             await self.audio(info, channel)
@@ -207,15 +216,17 @@ class Player:
             started = asyncio.get_running_loop().time()
             try:
                 self.radio_status = "reconectando" if warned else "conectando"
+                nicknames.show(self.guild, "Reconectando…" if warned else "Conectando…", radio=True)
                 await self.ensure_voice()
                 url = await asyncio.wait_for(resolve_stream(config["link"]), timeout=30)
-                await self.audio({"url": url}, live=True)
+                await self.audio({"url": url, "title": config["title"]}, live=True)
                 raise ConnectionError("Radio stream ended")
             except asyncio.CancelledError:
                 raise
             except Exception as error:
                 log.warning("Radio failed for guild %s: %s", self.guild.id, type(error).__name__)
                 self.radio_status = "reconectando"
+                nicknames.show(self.guild, "Reconectando…", radio=True)
                 if not warned:
                     await self.announce(self.radio_channel, "⚠️ La radio se cortó o no está disponible. Voy a intentar reconectarla automáticamente; podés detenerla con !radio off o !stop.")
                     warned = True
@@ -240,6 +251,7 @@ class Player:
                     self.current_kind = "radio"
                     self.current = asyncio.create_task(self.play_radio(dict(self.radio)))
                 else:
+                    nicknames.restore(self.guild)
                     try:
                         await asyncio.wait_for(self.wake.wait(), timeout=IDLE_TIMEOUT)
                     except asyncio.TimeoutError:
@@ -266,6 +278,7 @@ class Player:
         finally:
             if self.voice:
                 self.voice.stop()
+            nicknames.restore(self.guild)
 
     async def close(self, *, disconnect=True):
         self.closing = True
@@ -351,6 +364,8 @@ async def radio_command(ctx, *, value: str = "estado"):
             player = players.get(ctx.guild.id)
             if player:
                 player.set_radio(None)
+            else:
+                nicknames.restore(ctx.guild)
             await ctx.send("📻 Radio desactivada. La cola de canciones continúa; no retomaré la radio al reiniciar.")
         return
 
@@ -405,6 +420,7 @@ async def stop_command(ctx):
             await player.close()
         elif ctx.voice_client:
             await ctx.voice_client.disconnect(force=True)
+        nicknames.restore(ctx.guild)
         await ctx.send("⏹️ Detenido: desactivé la radio, vacié la cola y salí del canal.")
 
 
@@ -430,6 +446,13 @@ async def on_ready():
             text_channel = guild.get_channel(config["text_channel_id"])
             players[guild_id] = Player(guild, guild.voice_client, radio=config, radio_channel=text_channel)
             log.info("Restoring radio for guild %s", guild_id)
+    nicknames.restore_inactive(bot.guilds, players)
+
+
+@bot.event
+async def on_member_update(before, after):
+    if bot.user and after.id == bot.user.id and before.nick != after.nick:
+        nicknames.observe(after.guild.id)
 
 
 @bot.event
@@ -466,6 +489,7 @@ async def on_guild_remove(guild):
         if player:
             player.radio = None
             await player.close()
+        await nicknames.forget(guild.id)
 
 
 @bot.event

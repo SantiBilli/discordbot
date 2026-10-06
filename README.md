@@ -21,6 +21,8 @@ channel—even when everyone leaves. Deploy it with Docker Compose or Dokploy.
 - **Automatic recovery:** refresh radio stream URLs and retry interruptions with
   increasing delays, capped at 60 seconds.
 - **Voice controls:** only listeners in the configured voice channel can change or stop playback.
+- **Playback nickname:** show the current song or station as the bot's server
+  nickname, and restore the previous nickname when playback stops.
 - **Docker deployment:** a non-root container, persistent radio volume, restart policy, and rotating logs.
 
 ## Quick start
@@ -63,9 +65,39 @@ Garden API key is required. For hosting and updates, see the
 3. Enable **Message Content Intent** under **Privileged Gateway Intents**. Commands
    use the `!` prefix; member and presence intents are not required.
 4. In **OAuth2 → URL Generator**, choose the **bot** scope and these permissions:
-   **View Channels**, **Send Messages**, **Connect**, and **Speak**.
+   **View Channels**, **Send Messages**, **Connect**, **Speak**, and **Change Nickname**.
 5. Open the generated URL and invite the bot to your server. Administrator
    permission is unnecessary. Check channel-specific permission overrides too.
+
+For an already installed bot, open **Server Settings → Roles**, select a role
+assigned to the bot, and enable **Change Nickname**. Selecting permissions in the
+Developer Portal's URL Generator alone does not update an existing server role.
+Playback still works without this permission; automatic nicknames wait until it
+is granted. No new token or privileged intent is needed for nicknames.
+
+## Playback nickname
+
+The bot automatically uses `🎵 <song title>` for music and `📻 <station name>` for
+radio. A queued song temporarily replaces the radio nickname; the station name
+returns when radio resumes. Loading and radio recovery have short status labels.
+For radio, the name is the station, not the individual song being broadcast.
+
+Nicknames are independent for each server and appear in its voice channel,
+member list, and messages. Long titles are shortened with `…` to fit Discord's
+32-character limit; full song titles remain in playback announcements.
+
+When the queue is empty with no active radio, or after `!stop` or an external
+voice disconnect, the bot restores its previous server nickname. If it originally
+had no nickname, it clears the temporary nickname. Original nicknames are saved
+beside `RADIO_STATE_FILE` (`data/radio.nicknames.json` by default), so restarts do
+not turn a song title into the new permanent name.
+
+Updates run in the background and combine rapid changes. Discord rate limits
+can delay an update or restoration; these waits do not delay audio or commands.
+Keep the state directory writable so original nicknames can be saved safely.
+
+See Discord's [nickname permissions](https://support.discord.com/hc/en-us/articles/219070107-Server-Nicknames)
+and [nickname limits](https://docs.discord.com/developers/resources/user#usernames-and-nicknames).
 
 ## Commands
 

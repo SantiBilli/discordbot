@@ -5,6 +5,13 @@
 Creá tu propia aplicación y token de Discord y activá Message Content Intent
 como explica el README. Ejecutá una sola instancia del bot por token.
 
+Activá **Cambiar apodo / Change Nickname** en un rol asignado al bot desde
+**Ajustes del servidor → Roles** para mostrar lo que suena en el apodo. Para
+futuras instalaciones, incluí ese permiso también en **OAuth2 → URL Generator**.
+Cambiar solamente el enlace de invitación no otorga el permiso en un servidor
+existente. Los apodos no requieren intents privilegiados ni variables de entorno
+adicionales.
+
 ## Docker Compose
 
 Instalá Docker y su plugin Compose en el host, cloná el repositorio y ejecutá:
@@ -53,6 +60,8 @@ El volumen `radio_data` se monta en `/app/data`; Compose configura
 `RADIO_STATE_FILE=/app/data/radio.json`. Guarda el enlace de emisora y los
 identificadores del servidor y canales de voz/texto. No guarda enlaces de
 transmisión que vencen ni colas de canciones.
+Los apodos originales se guardan en `/app/data/radio.nicknames.json` dentro del
+mismo volumen, para restaurarlos después de un reinicio. Conservá ambos archivos.
 
 ```bash
 git pull --ff-only
@@ -60,7 +69,7 @@ docker compose up -d --build
 ```
 
 `docker compose down` conserva el volumen. **`docker compose down -v` elimina
-las preferencias de radio.** Mantené estable la identidad del proyecto/servicio
+las preferencias de radio y los apodos originales.** Mantené estable la identidad del proyecto/servicio
 Compose al redesplegar y respaldá el volumen si migrás a otro host.
 
 Para actualizar yt-dlp cuando cambie el comportamiento de YouTube:
@@ -80,9 +89,11 @@ Usá tu token y servidor de pruebas y una emisora disponible desde la región de
 1. Entrá al canal de voz y mandá `!radio <enlace>`; confirmá que hay audio y que
    `!radio estado` indica reproducción.
 2. Dejá el canal vacío; confirmá que el bot permanece y la radio continúa al volver.
-3. Agregá una canción con `!p`; confirmá que la radio vuelve al terminar la cola.
+3. Agregá una canción con `!p`; confirmá que el apodo muestra la canción y vuelve
+   a la emisora cuando retoma la radio. Puede demorar por los límites de Discord.
 4. Reiniciá el contenedor normalmente; debe retomar la radio sin otro comando.
-5. Usá `!stop` y reiniciá; la radio debe seguir desactivada.
+5. Usá `!stop`; confirmá que recupera el apodo original, luego reiniciá y verificá
+   que la radio sigue desactivada.
 6. Activá la radio otra vez y desconectá al bot desde Discord; no debe volver a
    entrar, incluso después de reiniciar.
 
@@ -101,6 +112,7 @@ exitosa no verifica el audio real de Discord ni la disponibilidad de la emisora.
 | La radio sigue reconectando | Enlace `/listen/`, emisora disponible y acceso saliente desde el host. |
 | No guarda la radio | Volumen persistente en `/app/data` con escritura para el usuario `bot`. |
 | No retoma la radio | Volumen conservado, canal existente y permisos Connect/Speak. |
+| No cambia o restaura el apodo | Cambiar apodo en el rol del bot, demoras de Discord y volumen de estado con escritura. Revisá los logs por un archivo de apodos corrupto conservado. |
 | Reinicia por memoria | Logs del despliegue y límite de memoria apropiado para el uso simultáneo. |
 
 Referencias oficiales: [Dokploy Compose](https://docs.dokploy.com/docs/core/docker-compose/example),

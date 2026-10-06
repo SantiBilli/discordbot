@@ -6,6 +6,8 @@ Notable changes are recorded here. Dates use YYYY-MM-DD.
 
 ### Added
 
+- Automatic per-server playback nicknames with song/station titles, background
+  updates, and persistent restoration of the original nickname.
 - English and Spanish READMEs and deployment guides.
 - MIT license, contribution/security policies, and issue/pull request templates.
 - GitHub Actions for Python tests, Docker builds, and redacted secret scans.

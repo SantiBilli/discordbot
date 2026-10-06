@@ -145,6 +145,10 @@ class RadioStoreTests(unittest.TestCase):
 
 class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        self.nickname_patch = patch.object(bot, "nicknames", MagicMock(forget=AsyncMock()))
+        self.nickname_patch.start()
+        self.stream_patch = patch.object(bot, "resolve_stream", new=AsyncMock(side_effect=blocked_stream))
+        self.stream_patch.start()
         self.temp = tempfile.TemporaryDirectory()
         self.store = RadioStore(Path(self.temp.name) / "radio.json")
         self.store_patch = patch.object(bot, "radio_store", self.store)
@@ -173,6 +177,8 @@ class RadioPlayerTests(unittest.IsolatedAsyncioTestCase):
         bot.locks.clear()
         bot.radio_requests.clear()
         self.store_patch.stop()
+        self.stream_patch.stop()
+        self.nickname_patch.stop()
         self.temp.cleanup()
 
     def player(self, *, radio_config=CONFIG, voice=None):

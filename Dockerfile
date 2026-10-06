@@ -8,6 +8,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd --create-home bot && mkdir -p /app/data && chown bot:bot /app/data
-COPY bot.py media.py radio.py state.py ./
+COPY bot.py media.py nickname.py radio.py state.py ./
 USER bot
 CMD ["python", "bot.py"]
